@@ -1,0 +1,30 @@
+# Model configuration
+model:
+  img_size: 224
+  num_classes: 1000
+  use_compile: false
+  use_fused_optimizer: false
+  use_checkpointing: false
+
+# Training configuration
+train:
+  num_epochs: 100
+  batch_size: 128
+  num_workers: 8
+  learning_rate: 0.001
+  weight_decay: 0.05
+  gradient_accumulation_steps: 1
+  use_mixup: false
+  use_fuse_adafactor: false
+  betas: [0.9, 0.95]
+  warmup_epochs: 0
+  reload: false
+
+# Data configuration
+data:
+  data_path: ./data/imagenet
+
+# Output configuration
+output_base_path: ./output
+expertiment_name: BVH_ViT_imagenet
+is_ddp: true
