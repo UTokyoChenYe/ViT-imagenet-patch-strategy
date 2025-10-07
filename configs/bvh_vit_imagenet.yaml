@@ -22,9 +22,9 @@ train:
 
 # Data configuration
 data:
-  data_path: ./data/imagenet
+  data_path: /storage/chenye/data/imagenet
 
 # Output configuration
-output_base_path: ./output
+output_base_path: /storage/chenye/train_result
 expertiment_name: BVH_ViT_imagenet
 is_ddp: true
