@@ -7,11 +7,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image, ImageDraw
 import numpy as np
+from collections import deque
+import cv2 as cv
 
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Callable
-import os
 
 # ---------------- Utilities ----------------
 def ensure_demo_image(path: str, size=(512, 512)):
@@ -308,9 +309,64 @@ class BVH2D:
                 best = {'cost': cost, 'axis': axis, 'threshold': threshold}
         return best
 
+    def serialize(self, img: np.ndarray, size=(8,8,3)) -> Tuple[List[np.ndarray], List[int], List[Tuple[float, float]], np.ndarray]:
+        """
+        将 BVH 中的节点序列化为 patch 序列，同时输出 patch 大小、位置、邻接矩阵。
+
+        Args:
+            img (np.ndarray): 输入图像 (H, W, C)
+            size (tuple): 输出 patch 尺寸 (h, w, c)
+
+        Returns:
+            seq_patch: 所有节点对应的 patch（缩放至指定 size）
+            seq_size: 每个 patch 对应的原始 bbox 宽度（可用作 scale encoding）
+            seq_pos: 每个 patch 的 bbox 中心位置（可用于位置编码）
+            adj_matrix: 邻接矩阵 (N, N)，包含父子连接
+        """
+        h2, w2, c2 = size
+        seq_patch, seq_size, seq_pos = [], [], []
+        node_list = []
+        parent_map = {}
+
+        # 遍历整棵树，记录节点编号和父子关系
+        def dfs(node, parent_idx=None):
+            idx = len(node_list)
+            node_list.append(node)
+            if parent_idx is not None:
+                parent_map[idx] = parent_idx
+            if not node.is_leaf:
+                dfs(node.left, idx)
+                dfs(node.right, idx)
+        dfs(self.root)
+        N = len(node_list)
+
+        # 提取 patch 内容、大小、中心位置
+        for node in node_list:
+            bbox = node.bbox
+            patch = img[int(bbox.ymin):int(bbox.ymax), int(bbox.xmin):int(bbox.xmax)]
+            h1, w1 = patch.shape[:2]
+            if h1 == 0 or w1 == 0:
+                patch = np.zeros((h2, w2, c2), dtype=np.uint8)
+            else:
+                patch = cv.resize(patch, (w2, h2), interpolation=cv.INTER_NEAREST)
+            if patch.ndim == 2:
+                patch = np.expand_dims(patch, axis=-1)
+            seq_patch.append(patch)
+            seq_size.append(int(bbox.width()))
+            seq_pos.append(bbox.centroid())
+
+        # 邻接矩阵 (父子连接)
+        adj = np.zeros((N, N), dtype=np.uint8)
+        for child, parent in parent_map.items():
+            adj[parent, child] = 1
+            adj[child, parent] = 1  # 可选：若是无向图
+
+        return seq_patch, seq_size, seq_pos, adj
+
+
+
     # ----------- 可视化：画 BVH 框 -----------
     def draw_bvh(self, ax, depth_color=False, linewidth=1.2):
-        from collections import deque
         q = deque([(self.root,0)])
         while q:
             node, d = q.popleft()
@@ -324,38 +380,90 @@ class BVH2D:
                 q.append((node.left,d+1)); q.append((node.right,d+1))
 
 # ---------------- Main Demo ----------------
+# if __name__ == "__main__":
+#     # 1) Load or create image
+#     img_path = "/storage/chenye/data/ImageNet/val/ILSVRC2010_val_00000136.JPEG"   # <- 如果你上传图片到此路径，将会用你的图片
+#     ensure_demo_image(img_path)             # 如果没有，会自动生成一张演示图
+
+#     # 2) Read and preprocess
+#     img = Image.open(img_path).convert("RGB")
+#     # Optionally downscale very large images for speed
+#     MAX_SIDE = 768
+#     w, h = img.size
+#     scale = 1.0
+#     if max(w,h) > MAX_SIDE:
+#         scale = MAX_SIDE / max(w,h)
+#         img = img.resize((int(w*scale), int(h*scale)), Image.BILINEAR)
+#         w, h = img.size
+
+#     gray = np.array(img.convert("L"))
+#     th = otsu_threshold(gray)
+#     binary = (gray < th).astype(np.uint8)  # objects assumed darker than background
+
+#     # 3) Extract bounding boxes via connected components
+#     boxes_px = connected_components(binary, min_area=max(50, (w*h)//5000))  # adaptive min area
+#     if not boxes_px:
+#         # fallback: try inverse if background assumption was wrong
+#         binary_inv = 1 - binary
+#         boxes_px = connected_components(binary_inv, min_area=max(50, (w*h)//5000))
+
+#     # 4) Build BVH over pixel-space AABBs
+#     aabbs = [AABB2D(x0, y0, x1, y1) for (x0,y0,x1,y1) in boxes_px]
+#     if not aabbs:
+#         # Ensure at least one box to avoid errors; add a tiny box in the center
+#         aabbs = [AABB2D(w*0.45, h*0.45, w*0.55, h*0.55)]
+#     bvh = BVH2D(aabbs, BuildParams2D(max_leaf_prims=6, bins=16, measure=AABB2D.perimeter), max_nodes=512)
+
+#     # 5) Plot: image + original boxes (red) + BVH boxes (gray)
+#     fig, ax = plt.subplots(figsize=(8, 8))
+#     ax.imshow(img)
+#     for b in aabbs:
+#         ax.add_patch(patches.Rectangle((b.xmin, b.ymin), b.width(), b.height(),
+#                                     fill=False, linewidth=1.0, edgecolor="red"))
+#     bvh.draw_bvh(ax, depth_color=False, linewidth=1.2)
+#     ax.set_title("Objects (red) + BVH bounding boxes (gray)")
+#     ax.set_axis_off()
+
+#     out_path = "./bvh_on_image.png"
+#     fig.savefig(out_path, dpi=200, bbox_inches="tight")
+
 if __name__ == "__main__":
+    import os
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    import networkx as nx
+    import cv2
+    from PIL import Image
+    import numpy as np
+
     # 1) Load or create image
-    img_path = "/storage/chenye/data/ImageNet/val/ILSVRC2010_val_00000136.JPEG"   # <- 如果你上传图片到此路径，将会用你的图片
-    ensure_demo_image(img_path)             # 如果没有，会自动生成一张演示图
+    img_path = "/storage/chenye/data/ImageNet/val/ILSVRC2010_val_00000136.JPEG"
+    ensure_demo_image(img_path)
 
     # 2) Read and preprocess
     img = Image.open(img_path).convert("RGB")
-    # Optionally downscale very large images for speed
     MAX_SIDE = 768
     w, h = img.size
     scale = 1.0
-    if max(w,h) > MAX_SIDE:
-        scale = MAX_SIDE / max(w,h)
-        img = img.resize((int(w*scale), int(h*scale)), Image.BILINEAR)
+    if max(w, h) > MAX_SIDE:
+        scale = MAX_SIDE / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), Image.BILINEAR)
         w, h = img.size
 
     gray = np.array(img.convert("L"))
     th = otsu_threshold(gray)
-    binary = (gray < th).astype(np.uint8)  # objects assumed darker than background
+    binary = (gray < th).astype(np.uint8)
 
     # 3) Extract bounding boxes via connected components
-    boxes_px = connected_components(binary, min_area=max(50, (w*h)//5000))  # adaptive min area
+    boxes_px = connected_components(binary, min_area=max(50, (w * h) // 5000))
     if not boxes_px:
-        # fallback: try inverse if background assumption was wrong
         binary_inv = 1 - binary
-        boxes_px = connected_components(binary_inv, min_area=max(50, (w*h)//5000))
+        boxes_px = connected_components(binary_inv, min_area=max(50, (w * h) // 5000))
 
     # 4) Build BVH over pixel-space AABBs
-    aabbs = [AABB2D(x0, y0, x1, y1) for (x0,y0,x1,y1) in boxes_px]
+    aabbs = [AABB2D(x0, y0, x1, y1) for (x0, y0, x1, y1) in boxes_px]
     if not aabbs:
-        # Ensure at least one box to avoid errors; add a tiny box in the center
-        aabbs = [AABB2D(w*0.45, h*0.45, w*0.55, h*0.55)]
+        aabbs = [AABB2D(w * 0.45, h * 0.45, w * 0.55, h * 0.55)]
     bvh = BVH2D(aabbs, BuildParams2D(max_leaf_prims=6, bins=16, measure=AABB2D.perimeter), max_nodes=512)
 
     # 5) Plot: image + original boxes (red) + BVH boxes (gray)
@@ -363,11 +471,47 @@ if __name__ == "__main__":
     ax.imshow(img)
     for b in aabbs:
         ax.add_patch(patches.Rectangle((b.xmin, b.ymin), b.width(), b.height(),
-                                    fill=False, linewidth=1.0, edgecolor="red"))
+                                       fill=False, linewidth=1.0, edgecolor="red"))
     bvh.draw_bvh(ax, depth_color=False, linewidth=1.2)
     ax.set_title("Objects (red) + BVH bounding boxes (gray)")
     ax.set_axis_off()
+    fig.savefig("./bvh_on_image.png", dpi=200, bbox_inches="tight")
 
-    out_path = "./bvh_on_image.png"
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    # 6) Serialization to patch sequence
+    print("📦 Serializing BVH...")
+    patch_size = (8, 8, 3)
+    seq_patch, seq_size, seq_pos, adj = bvh.serialize(np.array(img), size=patch_size)
 
+    print(f"✅ Patch count: {len(seq_patch)}")
+    print(f"📏 Size list: {seq_size[:5]} ...")
+    print(f"📍 Position list: {seq_pos[:5]} ...")
+    print(f"🧱 Adjacency shape: {adj.shape}, nonzeros: {np.count_nonzero(adj)}")
+
+    # 7) Patch grid image (前 64 个 patch 可视化)
+    patch_h, patch_w, patch_c = patch_size
+    grid_side = int(np.ceil(np.sqrt(min(len(seq_patch), 64))))
+    vis_grid = np.zeros((grid_side * patch_h, grid_side * patch_w, patch_c), dtype=np.uint8)
+    for idx, patch in enumerate(seq_patch[:64]):
+        row, col = divmod(idx, grid_side)
+        vis_grid[row * patch_h:(row + 1) * patch_h, col * patch_w:(col + 1) * patch_w] = patch
+    cv2.imwrite("./debug_patch_grid.png", vis_grid)
+
+    # 8) 中心点标注图
+    img_np = np.array(img).copy()
+    for (x, y) in seq_pos:
+        if x < 0 or y < 0: continue
+        cv2.circle(img_np, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
+    cv2.imwrite("./debug_patch_center.png", img_np)
+
+    # 9) 邻接矩阵结构图可视化
+    G = nx.Graph()
+    for i in range(len(seq_patch)):
+        G.add_node(i)
+    for i in range(adj.shape[0]):
+        for j in range(i + 1, adj.shape[1]):
+            if adj[i, j]:
+                G.add_edge(i, j)
+    plt.figure(figsize=(12, 12))
+    nx.draw(G, with_labels=True, node_size=300, font_size=8)
+    plt.title("Adjacency Matrix Graph (BVH Structure)")
+    plt.savefig("./debug_adjacency_graph.png")
