@@ -19,4 +19,5 @@ def bvh_patchify(img_np, patch_size=(8,8,3), max_nodes=512, max_leaf_prims=6, bi
     seq_patch = torch.from_numpy(np.stack(seq_patch)).permute(0,3,1,2).float()/255.0
     seq_pos = torch.tensor(seq_pos, dtype=torch.float32)
     seq_size = torch.tensor(seq_size, dtype=torch.float32).unsqueeze(-1)
-    return seq_patch, seq_pos, seq_size
+    adj = torch.tensor(adj, dtype=torch.bool)  
+    return seq_patch, seq_pos, seq_size, adj
