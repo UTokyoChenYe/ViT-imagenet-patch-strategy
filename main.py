@@ -49,6 +49,11 @@ def main():
         raise ValueError(f"Invalid experiment name: {expertiment_name}")
 
     # === 5. 启动训练 ===
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "4"
+    os.environ["NCCL_P2P_DISABLE"] = "1"
+
     if is_ddp and num_gpus > 1:
         print(f"🚀 Launching DDP training with {num_gpus} GPUs (port {master_port}) ...")
         cmd = [
@@ -63,7 +68,14 @@ def main():
         subprocess.run(cmd, check=True)
     else:
         print("🚀 Launching single GPU / CPU training ...")
-        bvh_vit_imagenet_local_train(args)
+        cmd = [
+            "python",
+            "train/vit_imagenet.py",
+            "--config",
+            config_copy_path
+        ]
+        print(" ".join(cmd))
+        subprocess.run(cmd, check=True, env=os.environ)
 
     print("✅ Training job finished successfully.")
 

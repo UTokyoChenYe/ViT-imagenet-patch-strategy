@@ -23,10 +23,10 @@ dataset:
   val_root: /storage/chenye/data/ImageNet/val
   num_classes: 1000
   patch_size: [8, 8, 3]     # 每个 patch 的空间大小
-  max_nodes: 512            # BVH 最大节点数（包括叶子与内部节点）
+  max_nodes: 256            # BVH 最大节点数（包括叶子与内部节点）
   max_leaf_prims: 6         # 每个叶节点最多的像素块数
   bins: 16                  # BVH 构建时的划分 bin 数
-  batch_size: 112
+  batch_size: 84
   num_workers: 8
 
 # -----------------------

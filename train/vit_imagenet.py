@@ -7,6 +7,7 @@ import yaml
 import logging
 import argparse
 import contextlib
+import time
 from typing import Dict, Any
 from tqdm import tqdm
 
@@ -27,7 +28,6 @@ from dataset.imagenet import ImageNetBVHDataset
 from dataset.utils import param_groups_lrd
 from model.vit import BVHViT
 
-
 # ---------------- Logging ----------------
 def setup_logging(output_path: str):
     os.makedirs(output_path, exist_ok=True)
@@ -38,6 +38,7 @@ def setup_logging(output_path: str):
         handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)],
     )
     return logging.getLogger("BVH-ViT")
+
 
 
 # ---------------- Eval (dict batch) ----------------
@@ -64,6 +65,20 @@ def evaluate(model: nn.Module, val_loader: DataLoader, device: torch.device, is_
 
 
 # ---------------- Train ----------------
+def check_memory(threshold_gb=10):
+    """监控显存剩余情况并在不足时清理缓存"""
+    if not torch.cuda.is_available():
+        return
+    if dist.is_initialized() and dist.get_rank() != 0:
+        return  # 只让 rank 0 执行监控
+    free, total = torch.cuda.mem_get_info()
+    free_gb = free / 1024 ** 3
+    if free_gb < threshold_gb:
+        logging.warning(f"[WARN] Free GPU memory only {free_gb:.2f} GB — waiting & clearing cache...")
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        time.sleep(3)
+
 def train_one_epoch(
     model: nn.Module,
     train_loader: DataLoader,
@@ -136,6 +151,9 @@ def train_one_epoch(
                 writer.add_scalar("train/acc", train_acc, step)
                 writer.add_scalar("train/lr", lr, step)
             running_loss, running_corrects, running_total = 0.0, 0, 0
+        
+        if (it + 1) % 100 == 0 and (not is_ddp or dist.get_rank() == 0):
+            torch.cuda.empty_cache()
 
 
 # ---------------- Build loaders ----------------
@@ -270,7 +288,7 @@ def main(cfg_path: str):
         model = DDP(
             model,
             device_ids=[torch.cuda.current_device()],
-            find_unused_parameters=True,      # <== 允许存在未参与反向的参数
+            find_unused_parameters=False,      # 不允许存在未参与反向的参数
             broadcast_buffers=False,          # 小优化，通常不需要同步 buffers
             gradient_as_bucket_view=True      # 更快的 bucket 视图
         )
@@ -295,7 +313,10 @@ def main(cfg_path: str):
     # train loop
     epochs = cfg.get("train", {}).get("epochs", 100)
     for epoch in range(start_epoch, epochs):
+        check_memory()
         if (not is_ddp) or dist.get_rank() == 0:
+            free, total = torch.cuda.mem_get_info()
+            logger.info(f"[GPU] Free {free / 1e9:.2f} GB / Total {total / 1e9:.2f} GB before epoch {epoch+1}")
             logger.info(f"=== Epoch {epoch+1}/{epochs} ===")
 
         train_one_epoch(
