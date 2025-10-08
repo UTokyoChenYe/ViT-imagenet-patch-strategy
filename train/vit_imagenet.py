@@ -362,9 +362,9 @@ def main(cfg_path: str):
                 logger.info(f"New best: {best:.3f} (saved to best_model.pth)")
             
             # 打印跳过坏图像统计
-            if hasattr(train_loader.dataset, "bad_count") and train_loader.dataset.bad_count > 0:
-                logger.warning(f"[ImageNet] {train_loader.dataset.bad_count} corrupted images skipped in epoch {epoch+1}.")
-                train_loader.dataset.bad_count = 0
+            if hasattr(train_loader.dataset, "bad_images_count") and train_loader.dataset.bad_images_count > 0:
+                logger.warning(f"[ImageNet] {train_loader.dataset.bad_images_count} corrupted images skipped in epoch {epoch+1}.")
+                train_loader.dataset.bad_images_count = 0
 
     is_main_process = (not is_ddp) or (dist.is_initialized() and dist.get_rank() == 0) 
 
