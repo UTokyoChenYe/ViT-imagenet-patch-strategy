@@ -1,0 +1,21 @@
+# 忽略 Python 编译缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# 忽略 Python 虚拟环境
+.venv/
+env/
+venv/
+ENV/
+
+# 忽略日志与临时文件
+*.log
+*.out
+*.tmp
+*.swp
+
+# 忽略 Jupyter notebook 的检查点
+.ipynb_checkpoints/
+

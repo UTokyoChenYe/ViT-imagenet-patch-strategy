@@ -32,6 +32,8 @@ class BVHViT(nn.Module):
         self.vit = VisionTransformer(img_size=224, patch_size=16,
                                      embed_dim=embed_dim, depth=depth,
                                      num_heads=num_heads, num_classes=num_classes)
+        self.blocks = self.vit.blocks
+        self.norm = self.vit.norm
 
     def forward(self, batch):
         patches, pos, size = batch['patches'], batch['positions'], batch['sizes']

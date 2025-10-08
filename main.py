@@ -16,8 +16,6 @@ cv2.setNumThreads(0)
 # 加入项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from train.vit_imagenet import bvh_vit_imagenet_ddp_train, bvh_vit_imagenet_local_train
-
 
 def main():
     parser = argparse.ArgumentParser(description="Training ViT in BVH patching")

@@ -11,7 +11,7 @@ is_ddp: true
 # Runtime Configuration
 # -----------------------
 runtime:
-  num_gpus: 8
+  num_gpus: 7
   master_port: 29500
 
 # -----------------------
@@ -19,14 +19,14 @@ runtime:
 # -----------------------
 dataset:
   name: ImageNetBVH
-  root: /storage/chenye/data/imagenet/train
-  val_root: /storage/chenye/data/imagenet/val
+  root: /storage/chenye/data/ImageNet/train
+  val_root: /storage/chenye/data/ImageNet/val
   num_classes: 1000
   patch_size: [8, 8, 3]     # 每个 patch 的空间大小
   max_nodes: 512            # BVH 最大节点数（包括叶子与内部节点）
   max_leaf_prims: 6         # 每个叶节点最多的像素块数
   bins: 16                  # BVH 构建时的划分 bin 数
-  batch_size: 128
+  batch_size: 112
   num_workers: 8
 
 # -----------------------
@@ -54,7 +54,7 @@ train:
   layer_decay: 0.75
   label_smoothing: 0.1
   use_compile: false
-  use_fused_optimizer: false
+  use_fused_optimizer: true
   use_checkpointing: false
   use_mixup: false
   use_fuse_adafactor: false

@@ -1,10 +1,14 @@
 import os
 import sys
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import yaml
 import logging
 import argparse
 import contextlib
 from typing import Dict, Any
+from tqdm import tqdm
 
 import torch
 import torch.distributed as dist
@@ -14,6 +18,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
+from train.utils import bvh_collate_fn
 
 sys.path.append("./")
 
@@ -81,7 +86,12 @@ def train_one_epoch(
     if is_ddp and hasattr(train_loader, "sampler") and isinstance(train_loader.sampler, DistributedSampler):
         train_loader.sampler.set_epoch(epoch)
 
-    for it, batch in enumerate(train_loader):
+    is_main = (not dist.is_initialized()) or (dist.get_rank() == 0)
+    iterable = train_loader
+    if is_main:
+        iterable = tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.get('train', {}).get('epochs', 100)}", ncols=100)
+
+    for it, batch in enumerate(iterable):
         is_accum = ((it + 1) % accum_steps) != 0
 
         # move to device
@@ -158,6 +168,7 @@ def build_loaders(cfg: Dict[str, Any], is_ddp: bool):
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,
+        collate_fn=bvh_collate_fn,
     )
     val_loader = DataLoader(
         val_set,
@@ -167,6 +178,7 @@ def build_loaders(cfg: Dict[str, Any], is_ddp: bool):
         num_workers=max(2, num_workers // 2),
         pin_memory=True,
         drop_last=False,
+        collate_fn=bvh_collate_fn,
     )
     return train_loader, val_loader
 
@@ -255,7 +267,13 @@ def main(cfg_path: str):
 
     # DDP wrap
     if is_ddp:
-        model = DDP(model, device_ids=[torch.cuda.current_device()], find_unused_parameters=False)
+        model = DDP(
+            model,
+            device_ids=[torch.cuda.current_device()],
+            find_unused_parameters=True,      # <== 允许存在未参与反向的参数
+            broadcast_buffers=False,          # 小优化，通常不需要同步 buffers
+            gradient_as_bucket_view=True      # 更快的 bucket 视图
+        )
 
     # resume
     start_epoch = 0
