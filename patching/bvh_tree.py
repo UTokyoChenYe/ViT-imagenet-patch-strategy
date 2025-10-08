@@ -5,13 +5,12 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import networkx as nx
 from PIL import Image, ImageDraw
 import numpy as np
 from collections import deque
 import cv2 as cv
 
-
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Callable
 
 # ---------------- Utilities ----------------
@@ -379,65 +378,10 @@ class BVH2D:
             if not node.is_leaf:
                 q.append((node.left,d+1)); q.append((node.right,d+1))
 
-# ---------------- Main Demo ----------------
-# if __name__ == "__main__":
-#     # 1) Load or create image
-#     img_path = "/storage/chenye/data/ImageNet/val/ILSVRC2010_val_00000136.JPEG"   # <- 如果你上传图片到此路径，将会用你的图片
-#     ensure_demo_image(img_path)             # 如果没有，会自动生成一张演示图
-
-#     # 2) Read and preprocess
-#     img = Image.open(img_path).convert("RGB")
-#     # Optionally downscale very large images for speed
-#     MAX_SIDE = 768
-#     w, h = img.size
-#     scale = 1.0
-#     if max(w,h) > MAX_SIDE:
-#         scale = MAX_SIDE / max(w,h)
-#         img = img.resize((int(w*scale), int(h*scale)), Image.BILINEAR)
-#         w, h = img.size
-
-#     gray = np.array(img.convert("L"))
-#     th = otsu_threshold(gray)
-#     binary = (gray < th).astype(np.uint8)  # objects assumed darker than background
-
-#     # 3) Extract bounding boxes via connected components
-#     boxes_px = connected_components(binary, min_area=max(50, (w*h)//5000))  # adaptive min area
-#     if not boxes_px:
-#         # fallback: try inverse if background assumption was wrong
-#         binary_inv = 1 - binary
-#         boxes_px = connected_components(binary_inv, min_area=max(50, (w*h)//5000))
-
-#     # 4) Build BVH over pixel-space AABBs
-#     aabbs = [AABB2D(x0, y0, x1, y1) for (x0,y0,x1,y1) in boxes_px]
-#     if not aabbs:
-#         # Ensure at least one box to avoid errors; add a tiny box in the center
-#         aabbs = [AABB2D(w*0.45, h*0.45, w*0.55, h*0.55)]
-#     bvh = BVH2D(aabbs, BuildParams2D(max_leaf_prims=6, bins=16, measure=AABB2D.perimeter), max_nodes=512)
-
-#     # 5) Plot: image + original boxes (red) + BVH boxes (gray)
-#     fig, ax = plt.subplots(figsize=(8, 8))
-#     ax.imshow(img)
-#     for b in aabbs:
-#         ax.add_patch(patches.Rectangle((b.xmin, b.ymin), b.width(), b.height(),
-#                                     fill=False, linewidth=1.0, edgecolor="red"))
-#     bvh.draw_bvh(ax, depth_color=False, linewidth=1.2)
-#     ax.set_title("Objects (red) + BVH bounding boxes (gray)")
-#     ax.set_axis_off()
-
-#     out_path = "./bvh_on_image.png"
-#     fig.savefig(out_path, dpi=200, bbox_inches="tight")
-
 if __name__ == "__main__":
-    import os
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
-    import networkx as nx
-    import cv2
-    from PIL import Image
-    import numpy as np
 
     # 1) Load or create image
-    img_path = "/storage/chenye/data/ImageNet/val/ILSVRC2010_val_00000136.JPEG"
+    img_path = "/home/chenye/workspace/ViT-imagenet-patch-strategy/patching/2548425.jpg"
     ensure_demo_image(img_path)
 
     # 2) Read and preprocess
@@ -494,14 +438,14 @@ if __name__ == "__main__":
     for idx, patch in enumerate(seq_patch[:64]):
         row, col = divmod(idx, grid_side)
         vis_grid[row * patch_h:(row + 1) * patch_h, col * patch_w:(col + 1) * patch_w] = patch
-    cv2.imwrite("./debug_patch_grid.png", vis_grid)
+    cv.imwrite("./debug_patch_grid.png", vis_grid)
 
     # 8) 中心点标注图
     img_np = np.array(img).copy()
     for (x, y) in seq_pos:
         if x < 0 or y < 0: continue
-        cv2.circle(img_np, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
-    cv2.imwrite("./debug_patch_center.png", img_np)
+        cv.circle(img_np, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
+    cv.imwrite("./debug_patch_center.png", img_np)
 
     # 9) 邻接矩阵结构图可视化
     G = nx.Graph()

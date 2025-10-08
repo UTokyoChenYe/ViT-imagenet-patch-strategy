@@ -1,30 +1,76 @@
-# Model configuration
-model:
-  img_size: 224
+# =======================================
+# BVH-ViT Training Config for ImageNet
+# =======================================
+
+# 基础信息
+expertiment_name: BVH_ViT_imagenet
+output_base_path: /storage/chenye/train_result
+is_ddp: true
+
+# -----------------------
+# Runtime Configuration
+# -----------------------
+runtime:
+  num_gpus: 8
+  master_port: 29500
+
+# -----------------------
+# Dataset Configuration
+# -----------------------
+dataset:
+  name: ImageNetBVH
+  root: /storage/chenye/data/imagenet/train
+  val_root: /storage/chenye/data/imagenet/val
   num_classes: 1000
+  patch_size: [8, 8, 3]     # 每个 patch 的空间大小
+  max_nodes: 512            # BVH 最大节点数（包括叶子与内部节点）
+  max_leaf_prims: 6         # 每个叶节点最多的像素块数
+  bins: 16                  # BVH 构建时的划分 bin 数
+  batch_size: 128
+  num_workers: 8
+
+# -----------------------
+# Model Configuration
+# -----------------------
+model:
+  name: BVHViT
+  img_size: 224
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  mlp_ratio: 4.0
+  num_classes: 1000
+
+# -----------------------
+# Training Configuration
+# -----------------------
+train:
+  epochs: 100
+  warmup_epochs: 0
+  lr: 0.001
+  weight_decay: 0.05
+  gradient_accumulation_steps: 1
+  betas: [0.9, 0.95]
+  layer_decay: 0.75
+  label_smoothing: 0.1
   use_compile: false
   use_fused_optimizer: false
   use_checkpointing: false
-
-# Training configuration
-train:
-  num_epochs: 100
-  batch_size: 128
-  num_workers: 8
-  learning_rate: 0.001
-  weight_decay: 0.05
-  gradient_accumulation_steps: 1
   use_mixup: false
   use_fuse_adafactor: false
-  betas: [0.9, 0.95]
-  warmup_epochs: 0
   reload: false
+  log_interval: 10
 
-# Data configuration
-data:
-  data_path: /storage/chenye/data/imagenet
+# -----------------------
+# TensorBoard Configuration
+# -----------------------
+tensorboard:
+  enable: true
+  log_dir: tensorboard
 
-# Output configuration
-output_base_path: /storage/chenye/train_result
-expertiment_name: BVH_ViT_imagenet
-is_ddp: true
+# -----------------------
+# Advanced Optional
+# -----------------------
+train_extra:
+  mixup_alpha: 0.8
+  cutmix_alpha: 1.0
