@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 from patching.patchify import bvh_patchify
+import logging
 
 
 class ImageNetBVHDataset(Dataset):
@@ -13,6 +14,7 @@ class ImageNetBVHDataset(Dataset):
         self.samples = []
         self.max_nodes = max_nodes
         self.patch_size = patch_size
+        self.bad_images_count = 0
 
         classes = sorted(os.listdir(root))
         self.class_to_idx = {cls: i for i, cls in enumerate(classes)}
@@ -27,7 +29,19 @@ class ImageNetBVHDataset(Dataset):
 
     def __getitem__(self, idx):
         path, label = self.samples[idx]
-        img = Image.open(path).convert("RGB")
+
+        try:
+            img = Image.open(path).convert("RGB")
+        except (Image.UnidentifiedImageError, OSError) as e:
+            # 只在 rank 0 打印警告（避免多卡重复输出）
+            import torch.distributed as dist
+            if (not dist.is_initialized()) or dist.get_rank() == 0:
+                logging.warning(f"[ImageNet] Skipping corrupted image: {path}")
+            # 创建一张黑图占位，保证后续不会出错
+            img = Image.new("RGB", (224, 224), (0, 0, 0))
+            self.bad_images_count += 1
+        
+        
         img_np = np.array(img)
 
         # ✅ bvh_patchify 已返回 (seq_patch, seq_pos, seq_size, adj)
