@@ -187,6 +187,7 @@ def build_loaders(cfg: Dict[str, Any], is_ddp: bool):
         pin_memory=True,
         drop_last=True,
         collate_fn=bvh_collate_fn,
+        persistent_workers=True,
     )
     val_loader = DataLoader(
         val_set,
@@ -197,6 +198,7 @@ def build_loaders(cfg: Dict[str, Any], is_ddp: bool):
         pin_memory=True,
         drop_last=False,
         collate_fn=bvh_collate_fn,
+        persistent_workers=True,
     )
     return train_loader, val_loader
 
