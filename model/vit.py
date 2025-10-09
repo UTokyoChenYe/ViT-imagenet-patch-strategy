@@ -31,7 +31,7 @@ class BVHPatchEmbed(nn.Module):
 
     def forward(self, x):
         B, N, C, H, W = x.shape
-        return self.linear(x.view(B, N, -1))  # (B,N,D)
+        return self.linear(x.reshape(B, N, -1))  # (B,N,D)
 
 
 # -------------------------------
