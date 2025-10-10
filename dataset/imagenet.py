@@ -49,6 +49,12 @@ class ImageNetBVHDataset(Dataset):
             img_np, patch_size=self.patch_size, max_nodes=self.max_nodes
         )
 
+        if seq_patch.shape[0] > self.max_nodes:
+            seq_patch = seq_patch[:self.max_nodes]
+            seq_pos = seq_pos[:self.max_nodes]
+            seq_size = seq_size[:self.max_nodes]
+            adj = adj[:self.max_nodes, :self.max_nodes]
+
         # ✅ 转换为 Tensor（bvh_patchify 已经返回 torch.Tensor 就不用重复转）
         if not isinstance(seq_patch, torch.Tensor):
             seq_patch = torch.tensor(seq_patch, dtype=torch.float32)

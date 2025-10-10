@@ -26,7 +26,7 @@ dataset:
   max_nodes: 256            # BVH 最大节点数（包括叶子与内部节点）
   max_leaf_prims: 6         # 每个叶节点最多的像素块数
   bins: 16                  # BVH 构建时的划分 bin 数
-  batch_size: 84
+  batch_size: 16
   num_workers: 8
 
 # -----------------------

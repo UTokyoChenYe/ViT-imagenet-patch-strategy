@@ -154,6 +154,7 @@ def train_one_epoch(
         
         if (it + 1) % 100 == 0 and (not is_ddp or dist.get_rank() == 0):
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
 
 # ---------------- Build loaders ----------------
@@ -379,4 +380,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/bvh_vit_imagenet.yaml")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except Exception as e:
+        print(f"❌ Training crashed: {e}")
+        raise
+    finally:
+        # ✅ 确保无论如何退出时都清理分布式组
+        if dist.is_available() and dist.is_initialized():
+            print("🧹 Cleaning up distributed process group...")
+            dist.destroy_process_group()

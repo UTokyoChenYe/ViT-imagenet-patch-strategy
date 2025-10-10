@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.vision_transformer import VisionTransformer
+from torch.utils.checkpoint import checkpoint
 
 
 # -------------------------------
@@ -93,8 +94,9 @@ class MaskedAttention(nn.Module):
 # -------------------------------
 class MaskedBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=True,
-                 drop=0., attn_drop=0., drop_path=0.):
+                 drop=0., attn_drop=0., drop_path=0., use_checkpoint=False):
         super().__init__()
+        self.use_checkpoint = use_checkpoint
         self.norm1 = nn.LayerNorm(dim)
         self.attn = MaskedAttention(dim, num_heads, qkv_bias=qkv_bias,
                                     attn_drop=attn_drop, proj_drop=drop)
@@ -109,9 +111,15 @@ class MaskedBlock(nn.Module):
         )
 
     def forward(self, x, attn_mask=None):
-        x = x + self.drop_path(self.attn(self.norm1(x), attn_mask))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+        def _inner_forward(x):
+            x = x + self.drop_path(self.attn(self.norm1(x), attn_mask))
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
+            return x
+        
+        if self.use_checkpoint:
+            return checkpoint(_inner_forward, x)
+        else:
+            return _inner_forward(x)
 
 
 # -------------------------------
@@ -132,7 +140,7 @@ class BVHViT(nn.Module):
 
         # 自定义 blocks
         self.blocks = nn.ModuleList([
-            MaskedBlock(embed_dim, num_heads, mlp_ratio=mlp_ratio)
+            MaskedBlock(embed_dim, num_heads, mlp_ratio=mlp_ratio, use_checkpoint=True)
             for _ in range(depth)
         ])
         self.norm = nn.LayerNorm(embed_dim)

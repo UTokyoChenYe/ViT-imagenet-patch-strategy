@@ -16,6 +16,17 @@ cv2.setNumThreads(0)
 # 加入项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def clean_tmp_files():
+    """清理残留的 PyTorch multiprocessing 临时文件"""
+    for f in os.listdir("."):
+        if f.startswith(("pymp-", "tmp")):
+            try:
+                if os.path.isdir(f):
+                    shutil.rmtree(f)
+                else:
+                    os.remove(f)
+            except Exception:
+                pass
 
 def main():
     parser = argparse.ArgumentParser(description="Training ViT in BVH patching")
@@ -49,10 +60,21 @@ def main():
         raise ValueError(f"Invalid experiment name: {expertiment_name}")
 
     # === 5. 启动训练 ===
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-    os.environ["OMP_NUM_THREADS"] = "4"
-    os.environ["NCCL_P2P_DISABLE"] = "1"
+    os.environ.update({
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True,max_split_size_mb:512",
+        "CUDA_LAUNCH_BLOCKING": "1",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NCCL_ASYNC_ERROR_HANDLING": "1",
+        "NCCL_P2P_DISABLE": "1",
+        "NCCL_IB_DISABLE": "1",
+        "PYTHONWARNINGS": "ignore"
+    })
+
+    # 打印 GPU 状态
+    print("🧠 Detected GPUs:", num_gpus)
+    print(f"📡 DDP enabled: {is_ddp} | Master port: {master_port}")
+
 
     if is_ddp and num_gpus > 1:
         print(f"🚀 Launching DDP training with {num_gpus} GPUs (port {master_port}) ...")
@@ -75,7 +97,14 @@ def main():
             config_copy_path
         ]
         print(" ".join(cmd))
-        subprocess.run(cmd, check=True, env=os.environ)
+        try:
+            subprocess.run(cmd, check=True, env=os.environ)
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Training failed: {e}")
+        finally:
+            # 确保清理临时文件
+            clean_tmp_files()
+            print("🧹 Cleaned temporary files.")
 
     print("✅ Training job finished successfully.")
 
